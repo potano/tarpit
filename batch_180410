@@ -1,0 +1,106 @@
+TAR's for branch tar-10_APR_2018
+
+
+HD-32786 CBCC - Convert to allogeneic from PTC
+  https://lifesouth.atlassian.net/browse/HD-32786
+  CBCC TAR
+  ISD-7236 CBCC - Convert to allogeneic from PTC
+  Marked for development 4/10/18
+  "Needed hot fix"; moved to next batch after inquiry
+
+
+HD-33258 SDR Visit ID Mislinked Issue
+  https://lifesouth.atlassian.net/browse/HD-33258
+  TAR-52593 - SDR Visit ID Mislinked Issue
+  ISD-7274 (For Developers): SDR mix-up (requires investigation)
+  Corrections made elsewhere; Zeb made inquiries
+  Can have possible followup
+
+
+HD-33546 SD - Assemble query of Mirasol platelets released last night
+  https://lifesouth.atlassian.net/browse/HD-33546
+  query
+  ISD-7304 Assemble query of Mirasol platelets released last night
+  Could not figure out what was being asked; Scott said he would take it
+
+
+HD-33748 Visitid not found in Correct Phlebotomies
+  https://lifesouth.atlassian.net/browse/HD-33748
+  TAR-52974 (For Developers): Visitid not found in Correct Phlebotomies
+  ISD-7364 Bad Visitid association and SDR scan
+  Zeb pointed out there was a procedure to have the user follow. He
+  posted directions and obtained a reply. Zeb made SQL to remove the
+  dangling visitid.
+  @isd-7364.sql from Zeb; applied 4/16/2018
+
+
+HD-33764 2RBC's entered as one
+  https://lifesouth.atlassian.net/browse/HD-33764
+  TAR-52980 2RBC (For Developers)
+  ISD-7365 2RBC (For Developers): One of RBCs wasn't entered at ST1
+  Marked for development 4/10/2018
+  Rukh found there had been no mention of QA involvement in this process,
+  so he asked for confirmation and obtained it.
+  @isd-7365.sql; applied applied 4/17/2018
+
+
+HD-33870 SDR Visit ID Mislinked Issue
+  https://lifesouth.atlassian.net/browse/HD-33870
+  TAR-53073 SDR Visit ID Mislinked Issue
+  ISD-7376 (For Developers)
+  Marked for development 4/11/2018
+  Donation made before CASI came online; full manual insertion of
+  sys_imaging.docindex_tab row needed
+  @isd-7376.sql; applied 4/16/2018
+
+
+HD-33889 New MOBI Centrifuges - 42159257 and 42159256
+  https://lifesouth.atlassian.net/browse/HD-33889
+  config
+  ISD-7442 New MOBI Centrifuges - 42159257 and 42159256
+  Marked for development 4/11/2018
+  @isd-7442.sql; applied 4/16/2018
+
+
+HD-33929 (for developers)
+  https://lifesouth.atlassian.net/browse/HD-33929
+  TAR-53097 (For Developers)
+  ISD-7392 (For Developers): Correct freeze time of cryo pool
+  Marked for development 4/12/2018
+  Jason observed that they should have been able to enter the unit into
+  the system: though late in doing the data entry, the time at entry to
+  the freezer was within limit; he asked that they try again
+  Submitter indicated the unit processed successfully
+
+
+HD-33945 Remove Plt from QC Selection Checklist
+  https://lifesouth.atlassian.net/browse/HD-33945
+  TAR-53094 Remove Plt from QC Selection Checklist
+  ISD-7393 Fix WBC count reason to get DIN off QC Selection Checklist
+  Marked for development 4/12/2018
+  @isd-7393.sql; marked done 4/17/2018
+
+
+HD-34058 SDR scan error
+  https://lifesouth.atlassian.net/browse/HD-34058
+  TAR-53186 (For Developers)
+  ISD-7448 SDR link issue
+  Marked for development 4/13/2018
+  Ad-hoc query discovered the visitid the user entered erroneously for
+  the SDR. Asked that user re-scan, switch the DIN to the new visitid,
+  and then advise us.
+  Followup query will be needed to clean up bad visitid
+
+
+HD-34051 IT - Add New Employee (redacted)
+  https://lifesouth.atlassian.net/browse/HD-34051
+  Erroneous link; found what is evidently the correct one
+
+
+HD-34059 Remove Plt from QC Selection Checklist
+  https://lifesouth.atlassian.net/browse/HD-34059
+  TAR-53093 Remove Plt from QC Selection Checklist
+  ISD-7411 Correct WBC Count Testing reason
+  Marked for development 4/13/2018
+  @isd-7411.sql; applied 4/17/2018
+

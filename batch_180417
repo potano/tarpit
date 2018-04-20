@@ -1,0 +1,28 @@
+Tars for branch tar-17_APR_2018
+
+
+HD-34254 Error message - JAXD Trima machine
+  https://lifesouth.atlassian.net/browse/HD-34254
+  config
+  ISD-7452 Error message - JAXD Trima machine
+  Marked for development 4/17/18
+  client/lab/database/pkb/pkg_submit_apheresis_ph.pkb
+  -> SYS_lab.PKG_SUBMIT_APHERESISPLAT_PH
+  @isd-7452.sql
+
+
+HD-34311 Reinstate Therapeutic Donor
+  https://lifesouth.atlassian.net/browse/HD-34311
+  TAR-53369 Reinstate Therapeutic Donor
+  ISD-7461 (For Developers): Reinstate Therapeutic
+  Marked for development 4/17/18
+  @isd-7461.sql
+
+
+HD-32786 CBCC - Convert to allogeneic from PTC
+  https://lifesouth.atlassian.net/browse/HD-32786
+  CBCC TAR
+  ISD-7236 CBCC - Convert to allogeneic from PTC
+  Marked for development 4/17/18
+  Resolved itself:  CBCC said there were no orders for donor
+

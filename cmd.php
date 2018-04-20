@@ -30,10 +30,14 @@ try {
         case 'desc':
         case 'url':
         case 'branch':
+        case 'reporter':
         case 'assignee':
+        case 'status':
           $valTo = $bareSwitch;
           break;
+        case 'reported':
         case 'assigned':
+        case 'resolved':
           $valTo = $bareSwitch;
           $required = FALSE;
           break;
@@ -88,12 +92,20 @@ try {
 
   switch ($action) {
     case 'add':
+      if ($positionals) {
+        foreach ($positionals as $item) {
+          if (!preg_match('/^(hd|isd|tar)\D*(\d*)/', strtolower($item), $matches)) {
+            fatal("Unrecognized parameter $item");
+          }
+          $options[$matches[1]] = $matches[2];
+        }
+      }
       $refno = $tp->addTar($options);
       echo "Added; refno = $refno\n";
       break;
     case 'edit':
       if (!$positionals) {
-        fatal("Need reference for item to edit");
+        fatal("Missing reference parameter for item to edit");
       }
       $refno = $positionals[0];
       $removals = array();
@@ -105,11 +117,62 @@ try {
       $tp->editTar($refno, $options, array_flip($removals));
       break;
     case 'show':
-      if (!$positionals) {
-        fatal("Need a reference for item to show");
+      if ($positionals) {
+        $tar = $tp->fetchTar($positionals[0]);
+        showFullTar($tar);
       }
-      $tar = $tp->fetchTar($positionals[0]);
-      showFullTar($tar);
+      elseif (!$options || !($ranges = $tp->getRangeConstraints($options))) {
+        fatal("Missing reference parameter for item to show");
+      }
+      else {
+        $tars = $tp->fetchTars($ranges);
+        if (!$tars) {
+          echo "No tars found\n";
+        }
+        foreach ($tars as $tarX => $tar) {
+          if ($tarX) {
+            echo "\n\n";
+          }
+          showFullTar($tar);
+        }
+      }
+      break;
+    case 'dump':
+      if (!$positionals) {
+        fatal("Missing indicator for kind of object to dump");
+      }
+      $kind = $positionals[0];
+      $separator = '-----------------';
+      switch ($kind) {
+        case 'tars':
+          echo "$separator\n";
+          $tars = $tp->getAllTars($options);
+          foreach ($tars as $tar) {
+            dumpFullTar($tar);
+            echo "$separator\n";
+          }
+          break;
+        default:
+          fatal("Unknown dump-type indicator $kind");
+          break;
+      }
+      break;
+    case 'import':
+      if (!$positionals) {
+        fatal("Missing indicator for what kind of object to import");
+      }
+      $kind = array_shift($positionals);
+      if ($positionals) {
+        $filename = $positionals[0];
+        $fh = fopen($filename, 'r');
+        if (!$fh) {
+          fatal("Cannot open $filename for reading");
+        }
+      }
+      else {
+        $fh = STDIN;
+      }
+      importTars($tp, $fh);
       break;
     default:
       fatal("Unrecognized action code $action");
@@ -126,24 +189,117 @@ function fatal($msg) {
 }
 
 
+
 function showFullTar($tar) {
+  $cols = Tarpit::getAvailableTarColumns();
   $pad = '';
   $desc = isset($tar['desc']) ? $tar['desc'] : '';
-  foreach (explode(' ', 'hd tar isd') as $key) {
+  foreach ($cols['index'] as $key) {
     if (isset($tar[$key])) {
       echo $pad, strtoupper($key), '-', $tar[$key], " $desc\n";
       $pad = '  ';
       $desc = '';
     }
   }
-  if (isset($tar['assigned'])) {
-     $assignee = isset($tar['assignee']) ? " to {$tar['assignee']}" : '';
-     echo "  Assigned {$tar['assigned']}$assignee\n";
+  if (isset($tar['url'])) {
+    echo "  ", $tar['url'], "\n";
   }
-  if (isset($tar['comment']))  {
-    foreach ($tar['comment'] as $item) {
-      echo "  $item\n";
+  foreach (array('assigned|assignee', 'reported|reporter') as $keys) {
+    list($when, $who) = explode('|', $keys);
+    if (isset($tar[$when])) {
+      $who = isset($tar[$who]) ? " to {$tar[$who]}" : '';
+      echo "  ", ucfirst($when), " {$tar[$when]}$who\n";
     }
   }
+  foreach ($cols['array'] as $key) {
+    if (isset($tar[$key]))  {
+      foreach ($tar[$key] as $item) {
+        echo "  $item\n";
+      }
+    }
+  }
+  $shown = explode(' ', 'desc url assigned assignee reported reporter');
+  foreach (array_diff($cols['scalar'], $shown) as $key) {
+    if (isset($tar[$key])) {
+      echo "  ", ucfirst($key), ": ", $tar[$key], "\n";
+    }
+  }
+}
+
+function dumpFullTar($tar) {
+  $cols = Tarpit::getAvailableTarColumns();
+  foreach ($cols['index'] as $key) {
+    if (isset($tar[$key])) {
+      echo "$key: {$tar[$key]}\n";
+    }
+  }
+  foreach ($cols['scalar'] as $key) {
+    if (isset($tar[$key])) {
+      echo "$key: {$tar[$key]}\n";
+    }
+  }
+  foreach ($cols['array'] as $key) {
+    if (isset($tar[$key])) {
+      foreach ($tar[$key] as $cX => $item) {
+        echo "{$key}_{$cX}_: $item\n";
+      }
+    }
+  }
+}
+
+function importTars($tp, $fh) {
+  $cols = Tarpit::getAvailableTarColumns();
+  $scalars = implode('|', array_merge($cols['index'], $cols['scalar']));
+  $scalarRE = "/^($scalars): (.*)/";
+  $arrays = implode('|', $cols['array']);
+  $arrayRE = "/^($arrays)_(\d+)_: (.*)/";
+  $activeKey = NULL;
+  $tar = array();
+  $lineno = 0;
+  $tarstart = NULL;
+  while (!feof($fh)) {
+    ++$lineno;
+    $line = rtrim(fgets($fh));
+    if (substr($line, 0, 10) == '----------') {
+      if ($tar) {
+        try {
+          $tp->addTar($tar, FALSE);
+        }
+        catch (Exception $e) {
+          throw new Exception($e->getMessage() .
+            " in tar starting at line $tarstart of import file");
+        }
+        $tar = array();
+        $activeKey = NULL;
+        $tarstart = NULL;
+      }
+      continue;
+    }
+    if (preg_match($scalarRE, $line, $matches)) {
+      list(, $key, $value) = $matches;
+      $tar[$key] = $value;
+      $activeKey = NULL;
+      if (!isset($tarstart)) {
+        $tarstart = $lineno;
+      }
+      continue;
+    }
+    if (preg_match($arrayRE, $line, $matches)) {
+      list(, $key, $index, $value) = $matches;
+      if (!isset($tar[$key])) {
+        $tar[$key] = array();
+      }
+      $tar[$key][$index] = $value;
+      $activeKey = $key;
+      continue;
+    }
+    if ($activeKey) {
+      $tar[$activeKey][$index] .= "\n" . $value;
+    }
+    elseif (isset($tarstart)) {
+      fatal("Cannot parse line $lineno of input file");
+    }
+  }
+  $tp->save();
 }
 

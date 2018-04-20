@@ -20,25 +20,25 @@ try {
       $valTo = NULL;
       $required = TRUE;
       $asArray = FALSE;
-      switch ($switch) {
-        case '--help':
+      switch ($bareSwitch) {
+        case 'help':
           help_message();
           exit(0);
-        case '--hd':
-        case '--tar':
-        case '--isd':
-        case '--desc':
-        case '--url':
-        case '--branch':
-        case '--assignee':
+        case 'hd':
+        case 'tar':
+        case 'isd':
+        case 'desc':
+        case 'url':
+        case 'branch':
+        case 'assignee':
           $valTo = $bareSwitch;
           break;
-        case '--assigned':
+        case 'assigned':
           $valTo = $bareSwitch;
           $required = FALSE;
           break;
-        case '--comment':
-        case '--remove':
+        case 'comment':
+        case 'remove':
           $valTo = $bareSwitch;
           $asArray = TRUE;
           break;
@@ -47,7 +47,7 @@ try {
       }
       if (isset($valTo)) {
         if (!isset($parm)) {
-          $canShift = !$args || $args[0]{0} == '-';
+          $canShift = $args && $args[0]{0} != '-';
           if ($required && !$canShift) {
             fatal("$switch switch requires a parameter");
           }
@@ -56,7 +56,7 @@ try {
           }
         }
         if ($asArray) {
-          if ($options[$valTo]) {
+          if (isset($options[$valTo])) {
             $options[$valTo][] = $parm;
           }
           else {
@@ -95,12 +95,21 @@ try {
       if (!$positionals) {
         fatal("Need reference for item to edit");
       }
-      $refno = $tp->findTar($positionals[0]);
+      $refno = $positionals[0];
       $removals = array();
-      foreach ($options['remove'] as $item) {
-        $removals = array_merge($removals, array_flip(explode(',', $item)));
+      if (isset($options['remove'])) {
+        foreach ($options['remove'] as $item) {
+          $removals = array_merge($removals, array_flip(explode(',', $item)));
+        }
       }
       $tp->editTar($refno, $options, array_flip($removals));
+      break;
+    case 'show':
+      if (!$positionals) {
+        fatal("Need a reference for item to show");
+      }
+      $tar = $tp->fetchTar($positionals[0]);
+      showFullTar($tar);
       break;
     default:
       fatal("Unrecognized action code $action");
@@ -114,5 +123,27 @@ catch (Exception $e) {
 function fatal($msg) {
   fwrite(STDERR, $msg . "\n");
   exit(1);
+}
+
+
+function showFullTar($tar) {
+  $pad = '';
+  $desc = isset($tar['desc']) ? $tar['desc'] : '';
+  foreach (explode(' ', 'hd tar isd') as $key) {
+    if (isset($tar[$key])) {
+      echo $pad, strtoupper($key), '-', $tar[$key], " $desc\n";
+      $pad = '  ';
+      $desc = '';
+    }
+  }
+  if (isset($tar['assigned'])) {
+     $assignee = isset($tar['assignee']) ? " to {$tar['assignee']}" : '';
+     echo "  Assigned {$tar['assigned']}$assignee\n";
+  }
+  if (isset($tar['comment']))  {
+    foreach ($tar['comment'] as $item) {
+      echo "  $item\n";
+    }
+  }
 }
 

@@ -6,12 +6,12 @@ class Tarpit {
     'hd' => 'int>0',
     'isd' => 'int>0',
     'tar' => 'int>0',
-    'desc' => 'str>""',
-    'url' => 'str>""',
-    'branch' => 'str>""',
-    'assignee' => 'str>""',
-    'comment' => 'str>""',
-    'assigned' => 'date=now',
+    'desc' => 'str>',
+    'url' => 'str>',
+    'branch' => 'str>',
+    'assignee' => 'str>',
+    'comment' => 'str>',
+    'assigned' => 'dat=now',
   );
   private static $indexkeys = array('hd', 'tar', 'isd');
   private static $staticblob;
@@ -25,7 +25,7 @@ class Tarpit {
 
   function addTar($data) {
     $data = $this->checkAllData($data);
-    if ($this->findTar($data)) {
+    if ($this->findTar($data) >= 0) {
       throw new Exception("Reference is in use");
     }
     if (!isset($data['isd'])) {
@@ -33,18 +33,16 @@ class Tarpit {
     }
     $refno = count($this->blob['alltars']);
     $this->updateIndices($data, $refno);
-    $this->blob['alltars'] = $data;
+    $this->blob['alltars'][$refno] = $data;
     $this->save();
     return $refno;
   }
 
   function editTar($refno, $data, $removals) {
-    if (!isset($this->blob['alltars'][$refno])) {
-      throw new Exception("Index error: cannot locate TAR");
-    }
+    $refno = $this->findTar($refno);
     $data = $this->checkAllData($data);
     $item = $this->blob['alltars'][$refno];
-    $origrefs = array_intersect_key($item, self::$indexkeys);
+    $origrefs = array_intersect_key($item, array_flip(self::$indexkeys));
     if (isset($data['comment'])) {
       if (isset($item['comment'])) {
         $item['comment'] = array_merge($item['comment'], $data['comment']);
@@ -55,15 +53,16 @@ class Tarpit {
     foreach ($removals as $key) {
       if (substr($key, 0, 6) == 'comment') {
         $index = preg_replace('/comment[^\d]*/', '', $key);
-        array_splice($blob['comment'], $index, 1);
+        array_splice($item['comment'], $index, 1);
       }
       else {
-        unset($blob[$key]);
+        unset($item[$key]);
       }
     }
-    $refs = array_intersect_key($item, self::$indexkeys);
-    $removedRefs = array_intersect_key($origrefs, $refs);
-    if (!$refs) {
+    $refs = array_intersect_key($item, array_flip(self::$indexkeys));
+    $removedRefs = array_diff_key($origrefs, $refs);
+    $remainingRefs = array_diff_key($refs, $removedRefs);
+    if (!$remainingRefs) {
       $rr = implode(', ', $removedRefs);
       if (count($removedRefs) > 1) {
         $rr = explode(' ', $rr);
@@ -76,11 +75,16 @@ class Tarpit {
       unset($this->blob['tarindex'][$key][$val]);
     }
     $this->updateIndices($item, $refno);
-    $blob['alltars'][$refno] = $item;
+    $this->blob['alltars'][$refno] = $item;
     $this->save();
   }
 
-  function findTar($ref) {
+  function fetchTar($ref) {
+    $refno = $this->findTar($ref);
+    return $this->blob['alltars'][$refno];
+  }
+
+  function findTar($ref, $check = FALSE) {
     if (is_array($ref)) {
       foreach (self::$indexkeys as $key) {
         if (isset($ref[$key])) {
@@ -90,20 +94,29 @@ class Tarpit {
       $val = $ref[$key];
     }
     else {
-      if (!preg_match('/^(hd|isd|tar)\s*(-\s*)?(\d+)/', strtolower($ref), $matches)) {
+      if (!preg_match('/^(hd|isd|tar)\s*(?:-\s*)?(\d+)/', strtolower($ref), $matches)) {
         throw new Exception("Cannot recognize $ref as a lookup key");
       }
       list(, $key, $val) = $matches;
     }
     if (!isset($this->blob['tarindex'][$key][$val])) {
-      throw new Exception("Cannot find $key $val");
+      if ($check) {
+        throw new Exception("Cannot find $key $val");
+      }
+      return -1;
     }
     $refno = $this->blob['tarindex'][$key][$val];
     foreach (self::$indexkeys as $key2) {
-      $v2 = $ref[$key2];
-      if (isset($ref[$key2]) && $this->blob['tarindex'][$key2][$v2] != $refno) {
-        throw new Exception("Key mismatch! $key2 $v2 refers to different document than $key $val");
+      if (isset($ref[$key2])) {
+        $v2 = $ref[$key2];
+        if (isset($ref[$key2]) && $this->blob['tarindex'][$key2][$v2] != $refno) {
+          throw new Exception(
+            "Key mismatch! $key2 $v2 refers to different document than $key $val");
+        }
       }
+    }
+    if (!isset($this->blob['alltars'][$refno])) {
+      throw new Exception("Index error: cannot locate TAR");
     }
     return $refno;
   }
@@ -124,7 +137,7 @@ class Tarpit {
         continue;
       }
       $value = $data[$key];
-      preg_match('/^[[:alpha:]]{3}(<([^<>=]*))?(>([^<>=]*))?(=([^<>=]*))?()$/', $type, $matches);
+      preg_match('/^([[:alpha:]]{3})(>([^<>=]*))?(<([^<>=]*))?(=([^<>=]*))?()$/', $type, $matches);
       list(, $type, $havemn, $min, $havemx, $max, $havedef, $default) = $matches;
       $min = $havemn ? $min : NULL;
       $max = $havemx ? $max : NULL;
@@ -132,12 +145,12 @@ class Tarpit {
       if (is_array($value)) {
         $outv = array();
         foreach ($value as $v) {
-          $outv[] = $this->testval($v, $key, $type, $minval, $maxval, $default);
+          $outv[] = $this->testval($v, $key, $type, $min, $max, $default);
         }
         $value = $outv;
       }
       else {
-        $value = $this->testval($value, $key, $type, $minval, $maxval, $default);
+        $value = $this->testval($value, $key, $type, $min, $max, $default);
       }
       $out[$key] = $value;
     }
@@ -146,24 +159,36 @@ class Tarpit {
 
   private function testval($value, $key, $type, $minval, $maxval, $default) {
     if (!isset($value)) {
-      if (isset($default)) {
-        return $default;
+      if (!isset($default)) {
+        throw new Exception("Need an explicit value for $key");
       }
-      throw new Exception("Need an explicit value for $key");
+      $value = $default;
     }
-    switch ($type) {
-      case 'int':
-        if (!ctype_digit($value)) {
-          throw new Exception("$value is not an integer");
-        }
-        break;
+    else {
+      switch ($type) {
+        case 'int':
+          if (!ctype_digit($value)) {
+            throw new Exception("$value is not an integer");
+          }
+          break;
+        case 'dat':
+          $ts = strtotime($value);
+          if (!$ts) {
+            throw new Exception("Invalid date: $value");
+          }
+          $value = date('Y-m-d H:i:s', $ts);
+      }
+      if (isset($minval) && $value < $minval) {
+        throw new Exception("'$value' is below the minimum for $key");
+      }
+      if (isset($maxval) && $value > $maxval) {
+        throw new Exception("'$value' is above the maximum for $key");
+      }
     }
-    if (isset($minval) && $value < $minval) {
-      throw new Exception("$value is below the minimum for $key");
+    if ('dat' == $type) {
+      return strtoupper(date('d M Y', strtotime($value)));
     }
-    if (isset($maxval) && $value > $maxval) {
-      throw new Exeption("$value is above the maximum for $key");
-    }
+    return $value;
   }
 
   private static function initStore() {
@@ -209,7 +234,7 @@ class Tarpit {
   }
 
   private function save() {
-    file_put_contents(json_encode(self::$blob));
+    file_put_contents(self::$filename, json_encode(self::$staticblob));
   }
 
 }

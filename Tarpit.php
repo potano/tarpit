@@ -18,6 +18,7 @@ class Tarpit {
     'comment' => 'arrstr>',
   );
   private static $indexkeys = array('hd', 'tar', 'isd');
+  private static $flippedIndexkeys;
   private static $staticblob;
 
   private $blob;
@@ -46,12 +47,12 @@ class Tarpit {
     return $refno;
   }
 
-  function editTar($refno, $data, $removals) {
+  function editTar($refno, $data, $removals, $flush = TRUE) {
     $data = $this->checkAllData($data);
     $refno = $this->findTar($refno);
     $this->checkTarRefererenceForCollisions($data, $refno);
     $item = $this->blob['alltars'][$refno];
-    $origrefs = array_intersect_key($item, array_flip(self::$indexkeys));
+    $origrefs = array_intersect_key($item, self::$flippedIndexkeys);
     if (isset($data['comment'])) {
       if (isset($item['comment'])) {
         $item['comment'] = array_merge($item['comment'], $data['comment']);
@@ -70,7 +71,7 @@ class Tarpit {
         unset($item[$key]);
       }
     }
-    $refs = array_intersect_key($item, array_flip(self::$indexkeys));
+    $refs = array_intersect_key($item, self::$flippedIndexkeys);
     $removedRefs = array_diff_key($origrefs, $refs);
     $remainingRefs = array_diff_key($refs, $removedRefs);
     if (!$remainingRefs) {
@@ -82,13 +83,35 @@ class Tarpit {
     }
     $this->updateIndices($item, $refno);
     $this->blob['alltars'][$refno] = $item;
-    $this->save();
+    if ($flush) {
+      $this->save();
+    }
   }
 
   function fetchTar($ref) {
     $refno = $this->findTar($ref);
     $this->checkTarRefererenceForCollisions($ref, $refno);
     return $this->blob['alltars'][$refno];
+  }
+
+  function removeTar($refno) {
+    $refno = $this->findTar($refno);
+    array_splice($this->blob['alltars'], $refno, 1);
+    foreach ($this->blob['tarindex'] as $key => $list) {
+      $rmval = NULL;
+      foreach ($list as $val => $rn) {
+        if ($rn == $refno) {
+          $rmval = $val;
+        }
+        elseif ($rn > $refno) {
+          --$this->blob['tarindex'][$key][$val];
+        }
+      }
+      if ($rmval) {
+        unset($this->blob['tarindex'][$key][$rmval]);
+      }
+    }
+    $this->save();
   }
 
   function checkTarRefererenceForCollisions($ref, $refno = NULL) {
@@ -122,7 +145,7 @@ class Tarpit {
         $group[] = "$k2-$v2";
       }
       $group = self::conjunctiveList($group, 'or');
-      if (isset($refno)) {
+      if (!isset($refno)) {
         throw new Exception("Cannot find $group");
       }
       throw new Exception("Internal error: cannot map $refno (from $key-$value) to a record");
@@ -138,35 +161,35 @@ class Tarpit {
       }
       $spec = $data[$key];
       $constraints = array_fill_keys(explode(' ', '= <> > >= < <='), array());
+      $nullable = FALSE;
       while (strlen($spec)) {
         if (!preg_match('/^(=|>=|<=|<>|>|<)([^=<>]*)/', $spec, $matches)) {
           break;
         }
         list($match, $op, $val) = $matches;
-        $spec = substr($spec, strlen($match));
-        $val = $this->checkAllData(array($key => $val));
-        $constraints[$op][] = $val;
-      }
-      if (strlen($spec)) {
-        foreach (explode(',', $spec) as $val) {
-          $val = $this->checkAllData(array($key => $val));
-          $constraints['='][] = $val;
-        }
-      }
-      $comp = array();
-      foreach ($contraints as $op => $arr) {
-        sort($arr);
-        $constraints[$op] = $arr;
-      }
-      $eq = array();
-      $nullable = FALSE;
-      foreach ($constraints['='] as $val) {
-        if ('null' == $val) {
+        if ('=' == $op && 'null' == $val) {
           $nullable = TRUE;
         }
         else {
-          $eq[] = $val;
+          $spec = substr($spec, strlen($match));
+          $val = $this->checkAllData(array($key => $val));
+          $constraints[$op][] = $val;
         }
+      }
+      if (strlen($spec)) {
+        foreach (explode(',', $spec) as $val) {
+          if ('null' == $val) {
+            $nullable = TRUE;
+          }
+          else {
+            $val = $this->checkAllData(array($key => $val));
+            $constraints['='][] = $val;
+          }
+        }
+      }
+      $comp = array();
+      foreach (array_keys($constraints) as $op) {
+        sort($constraints[$op]);
       }
       foreach ($constraints['>'] as $val) {
         $comp[] = array($val, NULL, NULL, NULL);
@@ -234,7 +257,7 @@ class Tarpit {
           }
         }
       }
-      $out[$key] = array($nullable, $eq, $constraints['<>'], $comp);;
+      $out[$key] = array($nullable, $constraints['='], $constraints['<>'], $comp);;
     }
     return $out;
   }
@@ -305,7 +328,7 @@ class Tarpit {
         ++$curtar;
       }
       else {
-        array_slice($workset, $curtar, 1);
+        array_splice($workset, $curtar, 1);
       }
     }
     return $workset;
@@ -319,7 +342,7 @@ class Tarpit {
   static function getAvailableTarColumns() {
     $scalar = $array = array();
     $index = self::$indexkeys;
-    $indexers = array_flip($index);
+    $indexers = self::$flippedIndexkeys;
     foreach (self::$tarkeys as $key => $type) {
       if (!isset($indexers[$key])) {
         if (substr($type, 0, 3) == 'arr') {
@@ -349,7 +372,7 @@ class Tarpit {
 
   private static function refToMap($ref) {
     if (is_array($ref)) {
-      return array_intersect_key($ref, array_flip(self::$indexkeys));
+      return array_intersect_key($ref, self::$flippedIndexkeys);
     }
     if (!preg_match('/^(hd|isd|tar)\s*(?:-\s*)?(\d+)/', strtolower($ref), $matches)) {
       throw new Exception("Cannot recognize $ref as a lookup key");
@@ -448,6 +471,7 @@ class Tarpit {
     if (self::$staticblob) {
       return;
     }
+    self::$flippedIndexkeys = array_flip(self::$indexkeys);
     if (!isset(self::$filename)) {
       $filename = self::FILEPATH;
       if ($filename{0} == '~') {

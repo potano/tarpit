@@ -102,8 +102,10 @@ try {
       }
       $refno = $tp->addTar($options);
       echo "Added; refno = $refno\n";
+      showFullTar($tp->fetchTar($options));
       break;
     case 'edit':
+    case 'update':
       if (!$positionals) {
         fatal("Missing reference parameter for item to edit");
       }
@@ -114,7 +116,34 @@ try {
           $removals = array_merge($removals, array_flip(explode(',', $item)));
         }
       }
-      $tp->editTar($refno, $options, array_flip($removals));
+      $removals = array_flip($removals);
+      if ('edit' == $action) {
+        echo "Now in database:\n";
+        showFullTar($tp->fetchTar($refno));
+        echo "\nWould update to\n";
+        $tp->editTar($refno, $options, $removals, FALSE);
+        showFullTar($tp->fetchTar($refno));
+        if (userApproves("\nMake the proposed edit?")) {
+          $tp->save();
+        }
+      }
+      else {
+        $tp->editTar($refno, $options, $removals);
+      }
+      break;
+    case 'remove':
+    case 'hardremove':
+      if (!$positionals) {
+        fatal("Missing reference parameter for item to remove");
+      }
+      $refno = $positionals[0];
+      if ('remove' == $action) {
+        showFullTar($tp->fetchTar($refno));
+        if (!userApproves("\nRemove this record?")) {
+          break;
+        }
+      }
+      $tp->removeTar($refno);
       break;
     case 'show':
       if ($positionals) {
@@ -131,7 +160,7 @@ try {
         }
         foreach ($tars as $tarX => $tar) {
           if ($tarX) {
-            echo "\n\n";
+            echo "\n";
           }
           showFullTar($tar);
         }
@@ -186,6 +215,12 @@ catch (Exception $e) {
 function fatal($msg) {
   fwrite(STDERR, $msg . "\n");
   exit(1);
+}
+
+function userApproves($prompt) {
+  echo "$prompt (y/n) ";
+  $input = strtolower(trim(fgets(STDIN)));
+  return substr($input, 0, 1) == 'y';
 }
 
 

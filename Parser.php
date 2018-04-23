@@ -145,16 +145,16 @@ class Parser {
                $type = '<>';
             }
          } 
-         elseif (preg_match('/^\s*is\*(not\s*)?null\s*/i', $source, $matches)) {
-            $type = $matches[1] ? 'notnull' : 'isnull';
+         elseif (preg_match('/^\s*is\s+(not\s+)?null\s*/i', $source, $matches)) {
+            $type = empty($matches[1]) ? 'isnull' : 'notnull';
          } 
          elseif (preg_match('/^\s*(and|or|[(),])\s*/i', $source, $matches)) {
             $type = strtolower($matches[1]);
          } 
-         elseif (preg_match('/^\s*(not\s*)?in\s*\(\*/i', $source, $matches)) {
-            $type = $matches[1] ? 'isnotin' : 'isin';
+         elseif (preg_match('/^\s*(not\s+)?in\s*\(\s*/i', $source, $matches)) {
+            $type = empty($matches[1]) ? 'isin' : 'isnotin';
          }
-         elseif (preg_match('/^\s*not\s*like\s*/i', $source, $matches)) {
+         elseif (preg_match('/^\s*not\s+like\s*/i', $source, $matches)) {
             $type = 'notlike';
          }
          elseif (preg_match('/^\s*(hd|tar|isd)-?(\d+)\s*/', $source, $matches)) {
@@ -194,9 +194,7 @@ class Parser {
          $terms[] = $term;
       }
       if (count($terms) > 1) {
-         $pos = $terms[0]['pos'];
          array_unshift($terms, 'log_or');
-         $terms['pos'] = $pos;
          return $terms;
       }
       return $terms[0];
@@ -220,9 +218,7 @@ class Parser {
          $factors[] = $factor;
       }
       if (count($factors) > 1) {
-         $pos = $factors[0]['pos'];
          array_unshift($factors, 'log_and');
-         $factors['pos'] = $pos;
          return $factors;
       }
       return $factors[0];
@@ -245,7 +241,7 @@ class Parser {
          $this->failToken("expected expression");
       }
       if ($negating) {
-         return array('!', $expr, 'pos' => $negating['pos']);
+         return array('!', $expr);
       }
       return $expr;
    }
@@ -268,9 +264,11 @@ class Parser {
          $tok_op2 = FALSE;
          $opclass = self::$relopClass[$op];
          if ('<' == $opclass) {
+            $this->failIfUnsortable($sym);
             $tok_op2 = $this->pickToken('<', '<=');
          }
          else if ('>' == $opclass) {
+            $this->failIfUnsortable($sym);
             $tok_op2 = $this->pickToken('>', '>=');
          }
          if ($tok_op2) {
@@ -281,9 +279,22 @@ class Parser {
             $this->checkSymbolValue($tok_sym, $tok_lit2);
             $op2 = $tok_op2[0];
             $lit2 = $tok_lit2[1];
-            return $opclass == '<' ?
-               array('><', $sym, $op != '<', $lit, $op2 != '<', $lit2) :
-               array('><', $sym, $op != '>', $lit2, $op != '>', $lit);
+            if ('<' == $opclass) {
+              $lower = $lit;
+              $lowEQ = $op != '<';
+              $upper = $lit2;
+              $uppEQ = $op2 != '<';
+            }
+            else {
+              $lower = $lit2;
+              $lowEQ = $op2 != '>';
+              $upper = $lit;
+              $uppEQ = $op != '>';
+            }
+            if ($lower > $upper) {
+              $this->failToken("low end of comparison range is greater than high end", -5);
+            }
+            return array('><', $sym, $lowEQ, $lower, $uppEQ, $upper);
          }
          return array(self::$swapop[$op], $sym, $lit);
       }
@@ -293,7 +304,10 @@ class Parser {
          if ($op) {
             $lit = $this->literal();
             if (!$lit) {
-               $this->failToken("expected comparison operator");
+               $this->failToken("expected string or integer");
+            }
+            if ('=' == self::$relopClass[$op[0]]) {
+              $this->failIfUnsortable($sym);
             }
             $this->checkSymbolValue($sym, $lit);
             $sym = $sym[1];
@@ -304,7 +318,11 @@ class Parser {
          $op = $this->pickToken('isnull', 'notnull');
          if ($op) {
             $this->checkSymbolValue($sym);
-            return array($op[0], $sym[1]);
+            $out = array('isnull', $sym[1]);
+            if ('notnull' == $op[0]) {
+               $out = array('!', $out);
+            }
+            return $out;
          }
          $op = $this->pickToken('isin', 'isnotin');
          if ($op) {
@@ -369,7 +387,7 @@ class Parser {
             }
             return $out;
          }
-         $this->failToken("expected relation operator or 'is'");
+         $this->failToken("expected relation operator or 'is', 'like', or 'not'");
       }
       $kv = $this->pickToken('kv_lit');
       if ($kv) {
@@ -379,15 +397,15 @@ class Parser {
    }
 
 
-   private function failToken($message) {
-      if ($this->tokenpos > count($this->tokens) - 1) {
+   private function failToken($message, $offset = 0) {
+      if ($this->tokenpos + $offset > count($this->tokens) - 1) {
          $pos = strlen($this->source);
       }
-      elseif (!$this->tokenpos) {
+      elseif ($this->tokenpos + $offset < 0) {
          $pos = 0;
       }
       else {
-         $pos = $this->tokens[$this->tokenpos - 1]['pos'];
+         $pos = $this->tokens[$this->tokenpos + $offset]['pos'];
       }
       throw new Exception("$pos|$message");
    }
@@ -428,6 +446,12 @@ class Parser {
 
    private function literalOrSymbol() {
       return $this->pickToken('str', 'int', 'sym');
+   }
+
+   private function failIfUnsortable($sym) {
+     if ('status' == $sym) {
+       $this->failToken("$sym does not allow less-than/greater-than comparisons", -1);
+     }
    }
 
    private function checkSymbolValue($sym, $value = NULL) {

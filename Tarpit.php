@@ -2,6 +2,38 @@
 class Tarpit {
   const FILEPATH = "~/tars/tarpit.json";
   private static $filename;
+  private static $ci = array();
+  private static $rawci = array(
+      'hd' => array('where' => 'tar tarindex tarsearch', 'type' => 'int', 'min' => 1,
+                    'desc' => 'HD-number of issue'),
+      'isd' => array('where' => 'tar tarindex tarsearch', 'type' => 'int', 'min' => 1,
+                     'desc' => 'ISD-number of issue'),
+      'tar' => array('where' => 'tar tarindex tarsearch', 'type' => 'int', 'min' => 1,
+                     'desc' => 'TAR-number of issue'),
+      'desc' => array('where' => 'tar tarsearch', 'type' => 'str', 'min' => ' ',
+                      'desc' => 'Issue description'),
+      'url' => array('where' => 'tar tarsearch', 'type' => 'str', 'min' => ' ',
+                     'desc' => 'URL of the ticket (generally the HD ticket)'),
+      'branch' => array('where' => 'tar tarsearch', 'type' => 'str', 'min' => ' ',
+                        'desc' => 'Git branch in which fix was deployed'),
+      'reported' => array('where' => 'tar tarsearch', 'type' => 'dat', 'default' => 'now',
+                          'desc' => 'Date on which item was reported (default=today)'),
+      'reporter' => array('where' => 'tar tarsearch', 'type' => 'str', 'min' => ' ',
+                         'desc' => 'Name of the one who made the report'),
+      'assigned' => array('where' => 'tar tarsearch', 'type' => 'dat', 'default' => 'now',
+                          'date' => 'Date the item was assigned'),
+      'assignee' => array('where' => 'tar tarsearch', 'type' => 'str', 'min' => ' ',
+                          'desc' => 'Name of the one to whom the ticket is assigned'),
+      'status' => array('where' => 'tar tarsearch', 'type' => 'enum', 'init' => self::getStatusInfo,
+                        'desc' => 'Ticket status'),
+      'resolved' => array('where' => 'tar tarsearch', 'type' => 'dat', 'default' => 'now',
+                         'desc' => 'Date when item was resolved'),
+      'comment' => array('where' => 'tar tarsearch', 'type' => 'arrstr', 'min' => ' ',
+                         'desc' => 'Comment (may occur multiple times per ticket)'),
+      'deployed' => array('where' => 'tarpseudo', 'type' => 'dat', 'default' => 'now',
+                          'desc' => 'Deployment date (equiv: -resolved -status=deployed)'),
+    );
+
   private static $tarkeys = array(
     'hd' => 'int>0',
     'isd' => 'int>0',
@@ -508,6 +540,33 @@ class Tarpit {
         throw new Exception("Serialization file $filename does not contain valid JSON");
       }
     }
+  }
+
+  private function columnInfo($name) {
+    if (isset($this->ci[$name])) {
+      return $this->ci[$name];
+    }
+    if (!isset(self::$rawci[$name])) {
+      throw new Exception("Unknown column name $name");
+    }
+    $info = self::$rawci[$name];
+    $info = array_merge(array('sortable' => TRUE), $info);
+    if (isset($info['init'])) {
+      $info = array_merge($info, $info['init']());
+    }
+    foreach (explode(' ', $info['where']) as $n) {
+      $info[$n] = TRUE;
+    }
+    $type = $info['type'];
+    if (substr($type, 0, 3) == 'arr') {
+      $info['isArray'] = TRUE;
+      $info['type'] = $type = substr($type, 3);
+    }
+    if ('emum' == $type) {
+      $info['sortable'] = FALSE;
+    }
+    $this->ci[$name] = $info;
+    return $info;
   }
 }
 

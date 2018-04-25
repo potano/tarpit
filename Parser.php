@@ -76,7 +76,7 @@
  * isnull (symbol)
  *   Returns TRUE if the given symbol is null.
  *
- * like (symbol, value)
+ * like (symbol, anchored_to_start, anchored_to_end, segments_in_middle)
  *   Returns TRUE if symbol value is passes the LIKE test with the given value
  *
  * log_and (operand*)
@@ -102,7 +102,7 @@ class Parser {
       '<>' => '<>');
    private static $relopClass = array(
       '<' => '<',
-      '<=' => '<=',
+      '<=' => '<',
       '=' => '=',
       '<>' => '=',
       '>' => '>',
@@ -166,7 +166,7 @@ class Parser {
             $val = $matches[1];
          } 
          else {
-            $this->failPos($pos);;
+            $this->failPos("unrecognized input", $pos);;
          }
          $tokens[] = array($type, $val, 'pos' => $pos);
          $used = strlen($matches[0]);
@@ -274,7 +274,7 @@ class Parser {
          if ($tok_op2) {
             $tok_lit2 = $this->literal();
             if (!$tok_lit2) {
-               $this->failToken("expected " . ($op{0} == '<' ? '< or <=' : '> or >='));
+               $this->failToken("expected string or integer");
             }
             $this->checkSymbolValue($tok_sym, $tok_lit2);
             $op2 = $tok_op2[0];
@@ -380,8 +380,23 @@ class Parser {
          $op = $this->pickToken(array('type' => 'notlike', 'sym' => 'like'));
          if ($op) {
             $this->checkSymbolValue($sym);
+            $sym = $sym[1];
             $val = $this->pickToken('str');
-            $out = array('like', $sym[1], $val[1]);
+            $val = $val[1];
+            if (!strlen($val)) {
+               $out = array('!', array('isnull', $sym));
+            }
+            else {
+               $parts = explode('%', $val);
+               if (count($parts) < 2) {
+                  $out = array('=', $parts[0]);
+               }
+               else {
+                  $anchorL = array_shift($parts);
+                  $anchorR = array_pop($parts);
+                  $out = array('like', $sym, $anchorL, $anchorR, $parts);
+               }
+            }
             if ($op[0] == 'notlike') {
                $out = array('!', $out);
             }
@@ -396,6 +411,10 @@ class Parser {
       return NULL;
    }
 
+
+   private function failPos($message, $pos) {
+      throw new Exception("$pos|$message");
+   }
 
    private function failToken($message, $offset = 0) {
       if ($this->tokenpos + $offset > count($this->tokens) - 1) {
@@ -455,6 +474,17 @@ class Parser {
    }
 
    private function checkSymbolValue($sym, $value = NULL) {
+      if (!$this->tp->isTarColumn($sym)) {
+         $this->failToken("$sym is not a TAR field");
+      }
+      if (isset($value)) {
+         try {
+            return $this->tp->checkColumnValue($sym, $value);
+         }
+         catch (Exception $e) {
+            $this->failToken("$sym has an illegal value: " . $e->getMessage());
+         }
+      }
    }
 }
 

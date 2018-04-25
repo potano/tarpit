@@ -2,37 +2,22 @@
 class Tarpit {
   const FILEPATH = "~/tars/tarpit.json";
   private static $filename;
-  private static $ci = array();
-  private static $rawci = array(
-      'hd' => array('where' => 'tar tarindex tarsearch', 'type' => 'int', 'min' => 1,
-                    'desc' => 'HD-number of issue'),
-      'isd' => array('where' => 'tar tarindex tarsearch', 'type' => 'int', 'min' => 1,
-                     'desc' => 'ISD-number of issue'),
-      'tar' => array('where' => 'tar tarindex tarsearch', 'type' => 'int', 'min' => 1,
-                     'desc' => 'TAR-number of issue'),
-      'desc' => array('where' => 'tar tarsearch', 'type' => 'str', 'min' => ' ',
-                      'desc' => 'Issue description'),
-      'url' => array('where' => 'tar tarsearch', 'type' => 'str', 'min' => ' ',
-                     'desc' => 'URL of the ticket (generally the HD ticket)'),
-      'branch' => array('where' => 'tar tarsearch', 'type' => 'str', 'min' => ' ',
-                        'desc' => 'Git branch in which fix was deployed'),
-      'reported' => array('where' => 'tar tarsearch', 'type' => 'dat', 'default' => 'now',
-                          'desc' => 'Date on which item was reported (default=today)'),
-      'reporter' => array('where' => 'tar tarsearch', 'type' => 'str', 'min' => ' ',
-                         'desc' => 'Name of the one who made the report'),
-      'assigned' => array('where' => 'tar tarsearch', 'type' => 'dat', 'default' => 'now',
-                          'date' => 'Date the item was assigned'),
-      'assignee' => array('where' => 'tar tarsearch', 'type' => 'str', 'min' => ' ',
-                          'desc' => 'Name of the one to whom the ticket is assigned'),
-      'status' => array('where' => 'tar tarsearch', 'type' => 'enum', 'init' => self::getStatusInfo,
-                        'desc' => 'Ticket status'),
-      'resolved' => array('where' => 'tar tarsearch', 'type' => 'dat', 'default' => 'now',
-                         'desc' => 'Date when item was resolved'),
-      'comment' => array('where' => 'tar tarsearch', 'type' => 'arrstr', 'min' => ' ',
-                         'desc' => 'Comment (may occur multiple times per ticket)'),
-      'deployed' => array('where' => 'tarpseudo', 'type' => 'dat', 'default' => 'now',
-                          'desc' => 'Deployment date (equiv: -resolved -status=deployed)'),
-    );
+  private static $ci = array(
+    'hd' => 'tar search|type:int|min:1|desc:HD-number of issue',
+    'isd' => 'tar search|type:int|min:1|desc:ISD-number of issue',
+    'tar' => 'tar search|type:int|min:1|desc:TAR-number of issue',
+    'desc' => 'tar search|type:str|min: |desc:Issue description',
+    'url' => 'tar search|type:str|min: |desc:URL of the ticket (generally the HD ticket)',
+    'branch' => 'tar search|type:str|min: |desc:Git branch in which fix was deployed',
+    'reported' => 'tar search|type:dat|default:now|desc:Date when item was reported',
+    'reporter' => 'tar search|type:str|min: |desc:Name of the one who made the report',
+    'assigned' => 'tar search|type:dat|default:now|desc:Date the item was assigned',
+    'assignee' => 'tar search|type:str|min: |desc:Name of the one to whom the ticket is assigned',
+    'status' => 'tar search|type:enum|init:getStatusInfo|desc:Ticket status',
+    'resolved' => 'tar search|type:dat|default:now|desc:Date when item was resolved',
+    'comment' => 'tar search|type:arrstr|min: |desc:Comment (may occur multiple times per ticket)',
+    'deployed' => 'tarpseudo|type:dat|default:now|init:getDeployedInfo',
+  );
 
   private static $tarkeys = array(
     'hd' => 'int>0',
@@ -185,177 +170,15 @@ class Tarpit {
     return $refno;
   }
 
-  function getRangeConstraints($data) {
-    $out = array();
-    foreach (self::$tarkeys as $key => $type) {
-      if (!array_key_exists($key, $data)) {
-        continue;
-      }
-      $spec = $data[$key];
-      $constraints = array_fill_keys(explode(' ', '= <> > >= < <='), array());
-      $nullable = FALSE;
-      while (strlen($spec)) {
-        if (!preg_match('/^(=|>=|<=|<>|>|<)([^=<>]*)/', $spec, $matches)) {
-          break;
-        }
-        list($match, $op, $val) = $matches;
-        if ('=' == $op && 'null' == $val) {
-          $nullable = TRUE;
-        }
-        else {
-          $spec = substr($spec, strlen($match));
-          $val = $this->checkAllData(array($key => $val));
-          $constraints[$op][] = $val;
-        }
-      }
-      if (strlen($spec)) {
-        foreach (explode(',', $spec) as $val) {
-          if ('null' == $val) {
-            $nullable = TRUE;
-          }
-          else {
-            $val = $this->checkAllData(array($key => $val));
-            $constraints['='][] = $val;
-          }
-        }
-      }
-      $comp = array();
-      foreach (array_keys($constraints) as $op) {
-        sort($constraints[$op]);
-      }
-      foreach ($constraints['>'] as $val) {
-        $comp[] = array($val, NULL, NULL, NULL);
-      }
-      foreach ($constraints['>='] as $val) {
-        $slotX = -1;
-        foreach ($comp as $cX => $slot) {
-          if ($val < $slot[0]) {
-            $slotX = $cX;
-            break;
-          }
-        }
-        $new = array(NULL, $val, NULL, NULL);
-        if ($slotX >= 0) {
-          array_splice($comp, $slotX, 0, $new);
-        }
-        else {
-          $comp[] = $new;
-        }
-      }
-      foreach ($constraints['<='] as $val) {
-        $found = FALSE;
-        foreach ($comp as $cX => $slot) {
-          if ((isset($slot[0]) && $val < $slot[0]) || (isset($slot[1]) && $val < $slot[0])) {
-            $found = TRUE;
-            if ($cX) {
-              $comp[$cX - 1][2] = $val;
-            }
-            break;
-          }
-        }
-        if (!$found) {
-          if ($comp) {
-            $comp[count($comp)-1][2] = $val;
-          }
-          else {
-            $comp[] = array(NULL, NULL, $val, NULL);
-          }
-        }
-      }
-      foreach ($constraints['<'] as $val) {
-        $found = FALSE;
-        foreach ($comp as $cX => $slot) {
-          if ((isset($slot[0]) && $val < $slot[0]) || (isset($slot[1]) && $val < $slot[0])) {
-            $found = TRUE;
-            if ($cX) {
-              --$cX;
-              if (isset($comp[$cX][2]) && $val > $comp[$cX][2]) {
-                $comp[$cX][2] = NULL;
-              }
-              $comp[$cX][3] = $val;
-            }
-            break;
-          }
-        }
-        if (!$found) {
-          if ($comp) {
-            $cX = count($comp) - 1;
-            if (isset($comp[$cX][2]) && $val > $comp[$cX][2]) {
-              $comp[$cX][2] = NULL;
-            }
-          }
-          else {
-            $comp[] = array(NULL, NULL, NULL, $val);
-          }
-        }
-      }
-      $out[$key] = array($nullable, $constraints['='], $constraints['<>'], $comp);;
-    }
-    return $out;
-  }
-
-  function fetchTars($ranges) {
+  function fetchTars($query, $options) {
+    require_once 'Parser.php';
+    $parser = new Parser($this);
+    $tree = $parser->parse($query);
     $workset = $this->blob['alltars'];
     $curtar = 0;
     while ($curtar < count($workset)) {
       $tar = $workset[$curtar];
-      $keep = TRUE;
-      foreach ($ranges as $key => $constraints) {
-        $try = 0;
-        list($nullable, $eq, $ne, $comps) = $constraints;
-        if (!isset($curtar[$key])) {
-          if (!$nullable) {
-            $keep = FALSE;
-            break;
-          }
-          continue;
-        }
-        $value = $curtar[$key];
-        if ($eq) {
-          foreach ($eq as $val) {
-            if ($val == $value) {
-              $try = 1;
-              break;
-            }
-          }
-        }
-        if ($ne) {
-          foreach ($ne as $val) {
-            if ($val == $value) {
-              $try = -1;
-              break;
-            }
-          }
-        }
-        if ($try) {
-          if ($try < 0) {
-            $keep = FALSE;
-            break;
-          }
-          continue;
-        }
-        foreach ($comps as $comp) {
-          list($lt, $le, $ge, $gt) = $comp;
-          if (isset($lt) && $value <= $lt) {
-            continue;
-          }
-          if (isset($le) && $value < $le) {
-            continue;
-          }
-          if (isset($ge) && $value > $ge) {
-            continue;
-          }
-          if (isset($gt) && $value >= $gt) {
-            continue;
-          }
-          $try = 1;
-          break;
-        }
-        if (!$try) {
-          $keep = FALSE;
-          break;
-        }
-      }
+      if ($this->evalQuery($tree, $tar)) {
       if ($keep) {
         ++$curtar;
       }
@@ -364,6 +187,115 @@ class Tarpit {
       }
     }
     return $workset;
+  }
+
+  function isColumnSortable($name) {
+    $info = self::columnInfo($name);
+    return $info['sortable'];
+  }
+
+  function isTarColumn($name) {
+    if (!isset(self::$columnInfo[$name])) {
+      return FALSE;
+    }
+    $info = self::columnInfo($name);
+    return isset($info['tar']);
+  }
+
+  function checkColumnValue($name, $value) {
+    return $this->checkAllData(array('name' => $value));
+  }
+
+
+
+  private function evalQuery($tree, $tar) {
+    $op = $tree[0];
+    if ('!' != $op && 'log_or' != $op && 'log_and' != $op) {
+      $sym = $tree[1];
+      if ('isnull' == $op) {
+        return !isset($tar[$sym]);
+      }
+      if (!isset($tar[$sym])) {
+        return FALSE;
+      }
+      $val = $tar[$sym];
+    }
+    switch ($op) {
+      case '!':
+        return ! $this->evalQuery($tree[1], $tar);
+      case '><':
+        list(,, $lowLE, $sym, $low, $highLE, $high) = $tree;
+        return ($lowLE ? $low <= $val : $low < $val) && ($highLE ? $val <= $high : $val < $high);
+      case '<':
+        return $val < $tree[2];
+      case '<=':
+        return $val <= $tree[2];
+      case '=':
+        return $val == $tree[2];
+      case '<>':
+        return $val != $tree[2];
+      case '>=':
+        return $val >= $tree[2];
+      case '>':
+        return $val > $tree[2];
+      case 'isin':
+        for ($i = 2; $i < count($tree); ++$i) {
+          if ($val == $tree[$i]) {
+            return TRUE;
+          }
+        }
+        return FALSE;
+      case 'like':
+        if (is_array($val)) {
+          $val = implode('', $val);
+        }
+        list(,, $anchorL, $anchorH, $segs) = $tree;
+        $len = strlen($anchorL);
+        if ($len) {
+          if (substr($val, 0, $len) != $anchorL) {
+            return FALSE;
+          }
+          $val = substr($val, $len);
+        }
+        $len = strlen($anchorR);
+        if ($len) {
+          if (substr($val, -$len) != $anchorR) {
+            return FALSE;
+          }
+          $val = substr($val, 0, -$len);
+        }
+        foreach ($segs as $seg) {
+          $len = strlen($seg);
+          if (!$len) {
+            continue;
+          }
+          $p = strpos($seg, $val);
+          if ($p === FALSE) {
+            return FALSE;
+          }
+          $val = substr($val, $p + $len);
+        }
+        return TRUE;
+        break;
+      case 'log_and':
+        for ($i = 1; $i < count($tree); ++$i) {
+          if (!$this->evalQuery($tree[$i], $tar)) {
+            return FALSE;
+          }
+        }
+        return TRUE;
+        break;
+      case 'log_or':
+        for ($i = 1; $i < count($tree); ++$i) {
+          if ($this->evalQuery($tree[$i], $tar)) {
+            return TRUE;
+          }
+        }
+        return FALSE;
+        break;
+      default:
+        throw new Exception("Unknown opcode $op");
+    }
   }
 
 
@@ -414,17 +346,16 @@ class Tarpit {
 
   private function checkAllData($data) {
     $out = array();
-    foreach (self::$tarkeys as $key => $type) {
+    foreach (array_keys(self::$ci) as $key) {
       if (!array_key_exists($key, $data)) {
         continue;
       }
+      $info = self::columnInfo($key);
       $value = $data[$key];
-      preg_match('/^(arr)?([[:alpha:]]{3})(>([^<>=]*))?(<([^<>=]*))?(=([^<>=]*))?()$/',
-        $type, $matches);
-      list(, $arr, $type, $havemn, $min, $havemx, $max, $havedef, $default) = $matches;
-      $min = $havemn ? $min : NULL;
-      $max = $havemx ? $max : NULL;
-      $default = $havedef ? $default : NULL;
+      $arr = is_array($info['isArray']);
+      $min = isset($info['min']) ? $info['min'] : NULL;
+      $max = isset($info['max']) ? $info['max'] : NULL;
+      $default = isset($info['default']) ? $info['default'] : NULL;
       if (is_array($value)) {
         $outv = array();
         foreach ($value as $v) {
@@ -462,7 +393,6 @@ class Tarpit {
           $value = date('Y-m-d H:i:s', $ts);
           break;
         case 'enu':
-          $range = explode(',', $maxval);
           $maxval = NULL;
           if (!in_array($value, $range)) {
             throw new Exception("Unknown $key value '$value'\n(must be one of " .
@@ -543,19 +473,22 @@ class Tarpit {
   }
 
   private function columnInfo($name) {
-    if (isset($this->ci[$name])) {
-      return $this->ci[$name];
-    }
-    if (!isset(self::$rawci[$name])) {
+    if (!isset(self::$ci[$name])) {
       throw new Exception("Unknown column name $name");
     }
-    $info = self::$rawci[$name];
-    $info = array_merge(array('sortable' => TRUE), $info);
-    if (isset($info['init'])) {
-      $info = array_merge($info, $info['init']());
+    if (is_array(self::$ci[$name])) {
+      return self::$ci[$name];
     }
-    foreach (explode(' ', $info['where']) as $n) {
-      $info[$n] = TRUE;
+    $parts = explode('|', self::$ci[$name]);
+    $info = array_merge(array('sortable' => TRUE),
+      array_fill_keys(explode(' ', array_shift($parts)), TRUE));
+    foreach ($parts as $item) {
+      list($k, $v) = explode(':', $item, 2);
+      $info[$k] = $v;
+    }
+    if (isset($info['init'])) {
+      $fn = $info['init'];
+      $info = array_merge($info, self::$fn());
     }
     $type = $info['type'];
     if (substr($type, 0, 3) == 'arr') {
@@ -567,6 +500,11 @@ class Tarpit {
     }
     $this->ci[$name] = $info;
     return $info;
+  }
+
+  private static getStatusInfo() {
+    $keys = explode(',', 'new,active,waiting,blocked,reassigned,ready,deployed,disregarded');
+    return array('sortable' => FALSE, 'max' => $keys);
   }
 }
 

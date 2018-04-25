@@ -146,24 +146,34 @@ try {
       $tp->removeTar($refno);
       break;
     case 'show':
-      if ($positionals) {
+      if (!$positionals) {
+        fatal("Need parameter to indicate which item to show");
+      }
         $tar = $tp->fetchTar($positionals[0]);
         showFullTar($tar);
       }
-      elseif (!$options || !($ranges = $tp->getRangeConstraints($options))) {
-        fatal("Missing reference parameter for item to show");
+      break;
+    case 'list':
+      if (!$positionals) {
+        fatal("Need search-query argument");
       }
-      else {
-        $tars = $tp->fetchTars($ranges);
-        if (!$tars) {
-          echo "No tars found\n";
-        }
-        foreach ($tars as $tarX => $tar) {
-          if ($tarX) {
+      $query = $positionals[0];
+      try {
+        $tars = $tp->fetchTars($query, $options);
+      }
+      catch (Exception $e) {
+         list($col, $message) = $e->getMessage();
+         $message .= "\n    $query\n    " . str_repeat(' ', $col), "^\n";
+         fatal($message);
+      }
+      if (!$tars) {
+         echo "No tars found\n";
+      }
+      foreach ($tars as $tarX => $tar) {
+         if ($tarX) {
             echo "\n";
-          }
-          showFullTar($tar);
-        }
+         }
+         showFullTar($tar);
       }
       break;
     case 'dump':

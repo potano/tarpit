@@ -24,7 +24,7 @@ class Tarpit {
                           'date' => 'Date the item was assigned'),
       'assignee' => array('where' => 'tar tarsearch', 'type' => 'str', 'min' => ' ',
                           'desc' => 'Name of the one to whom the ticket is assigned'),
-      'status' => array('where' => 'tar tarsearch', 'type' => 'enum', 'init' => self::getStatusInfo,
+      'status' => array('where' => 'tar tarsearch', 'type' => 'enum',
                         'desc' => 'Ticket status'),
       'resolved' => array('where' => 'tar tarsearch', 'type' => 'dat', 'default' => 'now',
                          'desc' => 'Date when item was resolved'),

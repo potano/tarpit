@@ -29,6 +29,7 @@ try {
         case 'isd':
         case 'desc':
         case 'url':
+        case 'type':
         case 'branch':
         case 'reporter':
         case 'assignee':

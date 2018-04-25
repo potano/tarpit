@@ -40,6 +40,7 @@ class Tarpit {
     'tar' => 'int>0',
     'desc' => 'str>',
     'url' => 'str>',
+    'type' => 'enu<tar,config,cbcc,hotfix,feature',
     'branch' => 'str>',
     'reported' => 'dat',
     'reporter' => 'str>',
@@ -569,4 +570,3 @@ class Tarpit {
     return $info;
   }
 }
-

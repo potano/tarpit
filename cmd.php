@@ -14,7 +14,7 @@ try {
     $arg = array_shift($args);
     if ($arg{0} == '-') {
       $switch = explode('=', $arg, 2);
-      $parm = count($switch) > 1 ? $parts[1] : NULL;
+      $parm = count($switch) > 1 ? $switch[1] : NULL;
       $switch = $switch[0];
       $bareSwitch = preg_replace('/^-*/', '', $switch);
       $valTo = NULL;

@@ -40,7 +40,7 @@ class Tarpit {
     'tar' => 'int>0',
     'desc' => 'str>',
     'url' => 'str>',
-    'type' => 'enu<tar,config,cbcc,hotfix,feature,inquiry',
+    'type' => 'enu<tar,config,cbcc,hotfix,feature,inquiry,defect',
     'branch' => 'str>',
     'reported' => 'dat',
     'reporter' => 'str>',
